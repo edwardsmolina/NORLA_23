@@ -1,0 +1,269 @@
+---
+format:
+  html:
+    toc: true
+    toc_float: true
+    embed-resources: true
+    self-contained-math: true
+editor_options: 
+  chunk_output_type: console
+---
+```{r packs, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, include=TRUE, warning = FALSE, message = FALSE, fig.width = 5)
+pacman::p_load(tidyverse, rio, knitr, ggrepel, pheatmap, RColorBrewer)
+theme_set(theme_bw(base_family = 14))
+```
+
+## ME1 / White high-tier: 
+
+![Query](https://console.cloud.google.com/bigquery?ws=!1m7!1m6!12m5!1m3!1sbcs-market-dev-lake!2ssouthamerica-east1!3s11f096e8-90f2-4e4f-a69e-2204afc58228!2e1) 
+
+- LDSR_SETOTU; EROTP_RMX; LDSR_CERCZM;	SMUTN_SUB_SPHTRE;	LDSR_PUCCSO	
+
+```{r, import-databases, eval=FALSE}
+wht_curr <- import("data/ME1_wht_24.csv") %>% 
+  unite("trait", c("OBS_observationRefCd", "OBS_descriptorAbbreviation")) %>% 
+  mutate(trait = str_remove_all(trait, "_N/A")) %>% 
+  mutate(trait = str_replace_all(trait, "YLD_", "YLD")) 
+
+wht_hist <- import("data/ME1_wht_pre24.csv") %>% 
+  unite("trait", c("OBS_observationRefCd", "OBS_descriptorAbbreviation")) %>% 
+  mutate(trait = str_remove_all(trait, "_N/A")) %>% 
+  mutate(trait = str_replace_all(trait, "YLD_", "YLD")) 
+
+wht <- wht_curr %>% 
+  bind_rows(wht_hist) %>% 
+  unite("year_loc", FIELD_plantingSeason, FIELD_name, remove = F)
+
+wht %>% names
+wht %>% count(sub_market, FIELD_Country, trait) 
+wht %>% count(sub_market, commercialName) 
+```
+
+```{r}
+wht %>% 
+  count(FIELD_plantingSeason, trait) %>%  
+  ggplot() + 
+  facet_wrap("trait") + 
+  aes(round(FIELD_plantingSeason), n, group=1) + 
+  geom_point() + geom_line() + 
+  geom_text_repel(
+    data = wht %>% 
+      count(FIELD_plantingSeason, trait) %>%  
+      filter(FIELD_plantingSeason == max(FIELD_plantingSeason)), 
+    aes(round(FIELD_plantingSeason), n, label=trait, group=1), 
+    alpha = 1, angle=90, max.overlaps=Inf) + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) +
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0)) +
+  guides(col="none")   + 
+  labs(title="M1 - white high tier")
+```
+
+> ldsr: setotu, puccso
+> sdp: fusasp, zzxxff
+> smutp
+
+```{r}
+me1_hibs <- c("HIPOPOTAMO", "CALAMAR",
+              "MX8639", "MX8438", "MX8436", "MY8509", "MX8432",
+              "VY8502","VY8503", "VX8614",  "VX8614",  
+              "DK4050", "DK4050", "DK5021",
+              "P3270W", "P3274W")
+# wht %>% distinct(trait)
+me1_trait <- c("LDSR_PUCCSO", "LDSR_SETOTU", "SDP_FUSASP", "SDP_ZZXXFF", "YLD")
+
+wht %>% 
+  filter(trait %in% me1_trait) %>% 
+  filter(commercialName %in% me1_hibs) -> wht_dat
+
+wht_dat$trait %>%  
+  ggplot() + 
+  facet_wrap("trait", scales="free_x") + 
+  aes(x=OBS_numValue, y=commercialName) + 
+  geom_point() + 
+  labs(title="M1 - white high tier")
+
+wht_dat %>% export("data/me1_white_high_tier.csv")
+```
+
+
+```{r}
+wht_dat %>% 
+  group_by(commercialName, trait)%>%
+  summarise(score= mean(OBS_numValue, na.rm = TRUE)) %>%
+  pivot_wider(names_from=commercialName, values_from = score) %>% 
+  column_to_rownames("trait") %>% 
+  # mutate_if(is.numeric, ~ReScale(., 1, 5)) %>% 
+  pheatmap(
+    cutree_rows = 3, cluster_col = FALSE, display_numbers = TRUE, 
+    number_format = "%.1f", cellwidth = 20, cellheight = 12, 
+    angle_col = "45" ,
+    col = rev(brewer.pal(6, 'RdYlGn')),
+    # legend_breaks = c(0, 1, 3, 5), # legend customisation
+    # legend_labels = c("Ausente", "Baja sev", "Media", "Alta sev"), 
+    main = "ME1 / White high-tier"
+  ) 
+
+```
+
+## ME3 / Yellow Biotech: 
+
+```{r, import-databases, eval=FALSE}
+yellow_bio_curr <- import("data/ME3_yellow_bio_24.csv") %>% 
+  unite("trait", c("OBS_observationRefCd", "OBS_descriptorAbbreviation")) %>% 
+  mutate(trait = str_remove_all(trait, "_N/A")) %>% 
+  mutate(trait = str_replace_all(trait, "YLD_", "YLD")) 
+
+yellow_bio_hist <- import("data/ME3_yellow_bio_pre24.csv") %>% 
+  unite("trait", c("OBS_observationRefCd", "OBS_descriptorAbbreviation")) %>% 
+  mutate(trait = str_remove_all(trait, "_N/A")) %>% 
+  mutate(trait = str_replace_all(trait, "YLD_", "YLD")) 
+
+ye_bio <- yellow_bio_curr %>% bind_rows(yellow_bio_hist) %>% 
+      unite("year_loc", FIELD_plantingSeason, FIELD_name, remove = F)
+
+ye_bio %>% names
+ye_bio %>% count(sub_market, FIELD_Country, trait) 
+```
+
+```{r}
+ye_bio %>% 
+  count(FIELD_plantingSeason, trait) %>%  
+  ggplot() + 
+  facet_wrap("trait") + 
+  aes(round(FIELD_plantingSeason), n, group=1) + 
+  geom_point() + geom_line() + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) +
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0)) +
+  guides(col="none")   + 
+  labs(title="M1 - white high tier")
+```
+
+```{r}
+ye_bio$commercialName %>% unique 
+
+me3_ye_bio_traits <- c("LDSR_CERCZM", "LDSR_CURVSP", "LDSR_DIPDMA", "LDSRP_PHYRM", "LDSR_PUCCSO", "LDSR_SETOTU", "LDSR_TARSC", "YLD")
+me3_ye_bio_hibs <- c("DKB360PRO3", "DKB255PRO3", "AG8065PRO3", "AG8480PRO3")
+
+ye_bio %>% 
+  filter(trait %in% me3_ye_bio_traits) %>% 
+  ggplot() + 
+  facet_wrap("trait", scales="free_x") + 
+  aes(x=OBS_numValue, y=commercialName) + 
+  geom_point() + 
+  labs(title="M3 - yellow biotech")
+```
+
+```{r}
+ye_bio %>% 
+  dplyr::filter(trait %in% me3_ye_bio_traits) %>% 
+  dplyr::filter(!commercialName %in% me3_ye_bio_hibs) -> me3_ye_bio
+  # filter(commercialName %in% me3_ye_bio_hibs) 
+
+me3_ye_bio$commercialName %>% unique
+me3_ye_bio%>% 
+  ggplot() + 
+  facet_wrap("trait", scales="free_x") + 
+  aes(x=OBS_numValue, y=commercialName) + 
+  geom_point() + 
+  labs(title="M3 - yellow biotech")
+
+me3_ye_bio %>% export("data/me3_yellow_biotech.csv")
+```
+
+
+```{r}
+me3_ye_bio %>% 
+  group_by(commercialName, trait)%>%
+  summarise(score= mean(OBS_numValue, na.rm = TRUE)) %>%
+  pivot_wider(names_from=commercialName, values_from = score) %>% 
+  column_to_rownames("trait") %>% 
+  # mutate_if(is.numeric, ~ReScale(., 1, 5)) %>% 
+  pheatmap(
+    cutree_rows = 3, cluster_col = FALSE, display_numbers = TRUE, 
+    number_format = "%.1f", cellwidth = 20, cellheight = 12, 
+    angle_col = "45" ,
+    col = rev(brewer.pal(6, 'RdYlGn')),
+    # legend_breaks = c(0, 1, 3, 5), # legend customisation
+    # legend_labels = c("Ausente", "Baja sev", "Media", "Alta sev"), 
+    main = "M3 / yellow biotech"
+  )
+```
+
+
+## ME3/Yellow High tier (convencional): 
+
+```{r, import-databases, eval=FALSE}
+yellow_conv_curr <- import("data/ME3_yellow_conv_24.csv") %>%
+  unite("trait", c("OBS_observationRefCd", "OBS_descriptorAbbreviation")) %>%
+  mutate(trait = str_remove_all(trait, "_N/A")) %>%
+  mutate(trait = str_replace_all(trait, "YLD_", "YLD"))
+# yellow_conv_curr$commercialName %>% unique
+
+yellow_conv_hist <- import("data/ME3_yellow_conv_pre24.csv") %>%
+  unite("trait", c("OBS_observationRefCd", "OBS_descriptorAbbreviation")) %>%
+  mutate(trait = str_remove_all(trait, "_N/A")) %>%
+  mutate(trait = str_replace_all(trait, "YLD_", "YLD"))
+# yellow_conv %>% 
+#   filter(commercialName %in% sel_hibs) %>% 
+#   export("data/ME3_yellow_conv_full_2024.csv")
+# yellow_conv <- import("data/ME3_yellow_conv_full_2024.csv")
+ye_conv <- yellow_conv_curr %>% bind_rows(yellow_conv_hist) %>% 
+      unite("year_loc", FIELD_plantingSeason, FIELD_name, remove = F)
+
+ye_conv %>% names
+ye_conv %>% count(sub_market, FIELD_Country, trait) 
+```
+
+```{r}
+ye_conv %>% 
+  count(FIELD_plantingSeason, trait) %>%  
+  ggplot() + 
+  facet_wrap("trait") + 
+  aes(round(FIELD_plantingSeason), n, group=1) + 
+  geom_point() + geom_line() + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) +
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0)) +
+  guides(col="none")   + 
+  labs(title="M3 - yellow convencional")
+```
+
+```{r}
+me3_ye_conv_traits <- c("LDSR_CERCZM", "LDSR_CURVSP", "LDSR_DIPDMA", "LDSRP_PHYRM", "LDSR_PUCCSO", "LDSR_SETOTU", "LDSR_TARSC", "LDSR_DIPDMA", "LDSR_COCHHE","LDSR_PHSPMA", "EROTP_FUSASP","EROTP_GIBBZE", "YLD")
+me3_ye_bio_hibs <- c("MW9792","MW9793","DK7088","DK8719","EMBLEMA777ULTRA","ADV9789","EMBLEMA777", "DK8023")
+
+ye_conv$commercialName %>% unique
+
+ye_conv %>% 
+  filter(trait %in% me3_ye_bio_traits) %>% 
+  filter(commercialName %in% me3_ye_bio_hibs) -> ye_conv_dat
+
+ye_conv_dat %>% 
+  ggplot() + 
+  facet_wrap("trait", scales="free_x") + 
+  aes(x=OBS_numValue, y=commercialName) + 
+  geom_point() + 
+  labs(title="M3 - yellow conven")
+
+ye_conv_dat %>% export("data/me3_yellow_high_tier.csv")
+```
+
+```{r}
+# ReScale <- function(x,first,last){(last-first)/(max(x)-min(x))*(x-min(x))+first}
+
+ye_conv_dat %>% 
+  group_by(commercialName, trait)%>%
+  summarise(score= mean(OBS_numValue, na.rm = TRUE)) %>%
+  pivot_wider(names_from=commercialName, values_from = score) %>% 
+  column_to_rownames("trait") %>% 
+  # mutate_if(is.numeric, ~ReScale(., 1, 5)) %>% 
+  pheatmap(
+    cutree_rows = 3, cluster_col = FALSE, display_numbers = TRUE, 
+    number_format = "%.1f", cellwidth = 20, cellheight = 12, 
+    angle_col = "45" ,
+    col = rev(brewer.pal(6, 'RdYlGn')),
+    # legend_breaks = c(0, 1, 3, 5), # legend customisation
+    # legend_labels = c("Ausente", "Baja sev", "Media", "Alta sev"), 
+    main = "M3 / yellow convencional"
+  )
+```

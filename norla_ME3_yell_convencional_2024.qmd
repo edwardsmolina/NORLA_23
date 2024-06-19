@@ -1,0 +1,174 @@
+---
+title: "me3_yellow_high_tier"
+format:
+  html:
+    toc: true
+    toc_float: true
+    embed-resources: true
+    self-contained-math: true
+editor_options: 
+  chunk_output_type: console
+---
+```{r packs, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, include=TRUE, warning = FALSE, message = FALSE, fig.width = 5)
+pacman::p_load(tidyverse, rio, knitr, ggrepel, pheatmap, RColorBrewer)
+theme_set(theme_bw(base_family = 14)) 
+ReScale <- function(x,first,last){(last-first)/(max(x)-min(x))*(x-min(x))+first}
+```
+
+("LDSR_CERCZM", "LDSR_CURVSP", "LDSR_DIPDMA", "LDSRP_PHYRM", "LDSR_PUCCSO", "LDSR_SETOTU", "LDSR_TARSC", "YLD")
+
+```{r}
+ye_conv <- import("data/me3_yellow_high_tier.csv")
+
+ye_conv %>% count(commercialName)
+
+ye_conv %>% 
+  count(FIELD_plantingSeason, trait) %>%  
+  ggplot() + 
+  facet_wrap("trait") + 
+  aes(round(FIELD_plantingSeason), n, group=1) + 
+  geom_point() + geom_line() + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) +
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0)) +
+  guides(col="none")   + 
+  labs(title="M3 - yellow high tier")
+```
+
+### Evol press
+
+```{r}
+ye_conv %>%  
+  filter(!trait == "YLD") %>% 
+  ggplot() + 
+  facet_wrap("trait", scales="free") +
+  aes(x=FIELD_plantingSeason, y=OBS_numValue, col=FIELD_Country) +
+  geom_jitter(width=.2, alpha=.2) + 
+  geom_boxplot(aes(group=interaction(FIELD_Country, FIELD_plantingSeason)), alpha=.2, width=.2) + 
+  geom_smooth(alpha=.1) + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) + 
+  scale_y_continuous(breaks=scales::pretty_breaks(6)) +
+  # stat_summary(fun = "mean", colour = "red", size = 5,
+  #              geom = "text", fontface= "bold", hjust=1,
+  #              aes(label = round(after_stat(y),1))) +
+  labs(title="M3 - yellow high tier")
+```
+
+
+### LDSR_TARSC
+
+```{r}
+ye_conv %>% 
+  filter(trait == "LDSR_TARSC") %>% 
+  group_by(FIELD_name) %>% 
+  summarise(LDSR_TARSC=quantile(OBS_numValue, 0.95)) %>% 
+  filter(LDSR_TARSC > 3) %>% 
+  pull(FIELD_name) -> TARSC_keep
+
+ye_conv %>% 
+  filter(FIELD_name %in% TARSC_keep) %>% 
+  filter(trait == "LDSR_TARSC") %>% 
+  select(FIELD_name, commercialName, OBS_numValue) -> TARSC_full 
+  # pivot_wider(names_from = commercialName, 
+  #             values_from = OBS_numValue) %>% 
+  # drop_na(-FIELD_name) %>% 
+  # pivot_longer(-FIELD_name) -> TARSC_full
+
+TARSC_full %>% 
+  ggplot(aes(x = FIELD_name, y = commercialName)) + 
+  geom_tile(colour="black", aes(fill = OBS_numValue)) +
+  scale_fill_viridis_c() +
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0))
+```
+
+### LDSR_SETOTU
+
+```{r}
+ye_conv %>%  
+  filter(trait == "LDSR_SETOTU") %>% 
+  ggplot() + 
+  facet_wrap("commercialName") + 
+  aes(x=FIELD_plantingSeason, y=OBS_numValue) +
+  geom_jitter(width=.2, alpha=.2) + 
+  stat_summary(fun.y=median, colour="red", geom="line", aes(group = 1)) + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) + 
+  scale_y_continuous(breaks=scales::pretty_breaks(6)) +
+  labs(title = "LDSR_SETOTU - M3 / yellow biotech")
+```
+
+```{r}
+wht %>% 
+  filter(trait == "LDSR_PUCCSO") %>% 
+  ggplot(aes(x = FIELD_name, y = commercialName)) + 
+  geom_tile(colour="black", aes(fill = OBS_numValue)) +
+  scale_fill_viridis_c() +
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0))
+
+wht %>% 
+  filter(trait == "LDSR_PUCCSO") %>% 
+  group_by(year_loc) %>% 
+  summarise(SDP_FUSASP=quantile(OBS_numValue, 0.9)) %>% 
+  filter(SDP_FUSASP > 2) %>% 
+  pull(year_loc) -> PUCCSO_keep
+
+wht %>% 
+  filter(year_loc %in% PUCCSO_keep) %>% 
+  filter(trait == "LDSR_PUCCSO") %>% 
+  select(year_loc, commercialName, OBS_numValue) %>% 
+  pivot_wider(names_from = commercialName,
+              values_from = OBS_numValue, 
+              values_fn = mean) %>%
+  drop_na(-year_loc) %>%
+  pivot_longer(-year_loc, names_to = "commercialName", values_to ="OBS_numValue") -> PUCCSO
+
+PUCCSO %>% 
+  ggplot(aes(x = year_loc , y = commercialName )) + 
+  geom_tile(colour="black", aes(fill = OBS_numValue)) +
+  scale_fill_viridis_c() +
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0))
+```
+
+
+
+```{r}
+wht %>% 
+  filter(!trait == "YLD") %>% 
+  group_by(commercialName, trait)%>%
+  summarise(score= mean(OBS_numValue, na.rm = TRUE)) %>%
+  pivot_wider(names_from=trait, values_from = score) %>% 
+  column_to_rownames("commercialName") %>% 
+  mutate_if(is.numeric, ~ReScale(., 1, 5), na.rm = TRUE) %>% 
+  pheatmap(
+    cutree_rows = 3, cluster_col = FALSE, 
+    # display_numbers = TRUE,  number_format = "%.1f", 
+    cellwidth = 20, cellheight = 12, 
+    angle_col = "45" ,
+    col = rev(brewer.pal(6, 'RdYlGn')),
+    legend_breaks = c(0, 1, 3, 5), # legend customisation
+    legend_labels = c("Ausente", "Baja sev", "Media", "Alta sev"), 
+    main = "ME1 / White high-tier" 
+  ) 
+```
+
+### LDSR_PUCCSO
+
+```{r}
+dat %>%  
+  filter(trait == "LDSR_PUCCSO") %>% 
+  # filter(commercialName %in% c("CALAMAR", "HIPOPOTAMO", "DK4050", "MX8639", "P3270W")) %>%
+  ggplot() + 
+  facet_wrap("commercialName") + 
+  aes(x=FIELD_plantingSeason, y=OBS_numValue) +
+  # aes(x=FIELD_plantingSeason, y=OBS_numValue) + 
+  geom_jitter(width=.2, alpha=.2) + 
+  stat_summary(fun.y=median, colour="red", geom="line", aes(group = 1)) + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) + 
+  scale_y_continuous(breaks=scales::pretty_breaks(6)) +
+  # stat_summary(fun = "median", colour = "white", size = 3) + 
+  # stat_summary(fun = "median", colour = "red", size = 5,
+  #              geom = "text", 
+  #              aes(label = paste("~", after_stat(y)))) + 
+  labs(title = "LDSR_PUCCSO - M3 / yellow biotech")
+```
+
+

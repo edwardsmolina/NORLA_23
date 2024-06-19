@@ -1,0 +1,444 @@
+---
+title: "ME1 / White high-tier" 
+---
+```{r packs, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, include=TRUE, warning = FALSE, message = FALSE, fig.width = 7)
+pacman::p_load(tidyverse, rio, knitr, ggrepel, pheatmap, RColorBrewer, lme4, multcomp, emmeans)
+conflicted::conflict_prefer("filter", "dplyr")
+conflicted::conflict_prefer("select", "dplyr")
+theme_set(theme_bw(base_family = 12)) 
+# ReScale <- function(x,first,last){(last-first)/(max(x)-min(x))*(x-min(x))+first}
+```
+
+- LDSR_SETOTU; EROTP_RMX; LDSR_CERCZM;	SMUTN_SUB_SPHTRE;	LDSR_PUCCSO	
+- ldsr: setotu, puccso
+- sdp: fusasp, zzxxff
+- smutp
+
+```{r}
+riegos <- import("data/riegos_24.xlsx") %>% 
+  janitor::clean_names() %>% 
+  rename(FIELD_name = "localidad_sinaloa") %>%  
+  distinct(FIELD_name, no_riegos) 
+
+wht <- import("data/me1_white_high_tier.csv") %>% 
+  select(-FIELD_name_1) %>%
+  left_join(riegos)
+```
+
+Data-points
+
+```{r data-points}
+wht %>% 
+  count(FIELD_plantingSeason, trait) %>%  
+  ggplot() + 
+  facet_wrap("trait") + 
+  aes(round(FIELD_plantingSeason), n, group=1) + 
+  geom_point() + geom_line() + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) +
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0)) +
+  guides(col="none")   + 
+  labs(title="M1 - white high tier")
+```
+
+### YLD
+
+```{r, eval=TRUE}
+wht %>% 
+  filter(FIELD_plantingSeason == 2023) %>% 
+  filter(trait == "YLD") -> wht23
+
+YLD_mod <- lmer(OBS_numValue ~ commercialName+ (1|year_loc), data=wht23)
+YLD_res <- cld(emmeans(YLD_mod, ~commercialName), Letters=letters) %>% 
+      mutate(rank = dense_rank(desc(str_squish(.group))))
+YLD_res
+```
+
+
+```{r, eval=FALSE}
+# EFecto riego
+wht23 %>% 
+  ggplot(aes(y = OBS_numValue, x=no_riegos)) + 
+  facet_wrap("commercialName") + 
+  geom_point(alpha=.05) + 
+  # geom_boxplot(aes(group=no_riegos)) + 
+  geom_smooth(method="lm") + 
+  # stat_summary(col="red", size= 1) + 
+  stat_summary(aes(label=round(..y..)), 
+               fun.y=mean, geom="text", size=3, vjust = -0.5) 
+  # scale_x_continuous(breaks=scales::pretty_breaks(3))
+
+mod <- lm(OBS_numValue ~ factor(no_riegos)*commercialName, data=wht23)
+anova(mod)
+```
+
+
+```{r, eval=FALSE}
+wht %>% 
+  # filter(commercialName %in% c("HIPOPOTAMO", "DK4050","DK5021", "P3270W", "P3274W")) %>%
+  filter(trait == "YLD") %>%
+  ggplot(aes(y = OBS_numValue, x = FIELD_plantingSeason)) + 
+  facet_wrap("commercialName") + 
+  geom_point() + 
+  geom_boxplot(aes(group=FIELD_plantingSeason)) + 
+  geom_smooth() + 
+  theme_bw(base_size = 18) +
+  stat_summary(col="red", size= 1) + 
+  stat_summary(aes(label=round(..y..)), fun.y=mean, geom="text",
+               size=6, vjust = -0.5) + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3))
+
+wht %>% 
+  # distinct(FIELD_plantingSeason, FIELD_name) %>% 
+  # count(FIELD_plantingSeason)
+  filter(trait == "YLD") %>%
+  filter(FIELD_plantingSeason == 2023) %>%
+  ggplot(aes(y = fct_reorder(commercialName, OBS_numValue, mean), x = OBS_numValue)) + 
+  geom_point() + 
+  theme_bw(base_size = 18) +
+  geom_boxplot() + 
+  stat_summary(col="red", size= 1) + 
+  stat_summary(aes(label=round(..x..,2)), fun.y=mean, geom="text", size=6, vjust = -0.5)
+
+# Cuanto mas oscuro >> MEJOR: mas rendimiento
+
+wht %>% 
+  filter(trait == "YLD") %>%
+  filter(FIELD_plantingSeason == 2023) %>%
+  ggplot(aes(y = FIELD_name, x = commercialName)) + 
+  geom_tile(colour="black", aes(fill = OBS_numValue)) +
+  scale_fill_viridis_c(direction=-1) +
+  # theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1.0))+
+  scale_x_discrete(position = "top", expand = c(0,0)) +
+  theme_bw(base_size = 12) +
+  theme(legend.position="bottom") +
+  theme(axis.text.x = element_text(angle=30, hjust=0,vjust=0))  +
+  labs(x="") 
+
+
+
+```
+
+### Evolución de enfermedades
+
+```{r}
+wht %>%  
+  # filter(trait %in% c("SDP_ZZXXFF")) %>%
+  # count(year_loc)
+  # filter(commercialName %in% c("HIPOPOTAMO", "DK4050","DK5021", "P3270W", "P3274W")) %>%
+  ggplot() + 
+  facet_wrap("trait", scales="free") +
+  aes(x=FIELD_plantingSeason, y=OBS_numValue) +
+  geom_jitter(width=.2, alpha=.2) + 
+  geom_boxplot(aes(group=FIELD_plantingSeason), alpha=.2, width=.2) + 
+  geom_smooth(alpha=.1, span=.9) + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) + 
+  scale_y_continuous(breaks=scales::pretty_breaks(6)) +
+  stat_summary(fun = "mean", colour = "red", size = 3,
+               geom = "text", fontface= "bold", hjust=1,
+               aes(label = round(after_stat(y),1))) +
+  labs(title="M1/white high tier")
+```
+
+### SDP_FUSASP
+
+Datos crudos: Cuanto mas oscuro >> MEJOR (menos enfermedad)
+
+```{r, fig.width=10}
+wht %>% 
+  filter(str_detect(trait, "SDP_FUSASP|SDP_ZZXXFF")) %>%
+  group_by(year_loc) %>% 
+  summarise(SDP_FUSASP=quantile(OBS_numValue, 0.9)) %>% 
+  filter(SDP_FUSASP > 10) %>% 
+  pull(year_loc) -> FUSASP_keep
+
+wht %>% 
+  filter(year_loc %in% FUSASP_keep) %>% 
+  filter(str_detect(trait, "SDP_FUSASP|SDP_ZZXXFF")) %>%
+  select(year_loc, no_riegos, commercialName, OBS_numValue) %>% 
+  pivot_wider(names_from = commercialName,
+              values_from = OBS_numValue, 
+                values_fn = mean
+              ) %>%
+  drop_na(-year_loc) %>%
+  pivot_longer(-(year_loc:no_riegos), 
+               names_to = "commercialName", 
+               values_to ="OBS_numValue") -> FUSASP
+
+FUSASP %>% 
+  ggplot(aes(y= year_loc, x = commercialName )) + 
+  geom_tile(colour="black", aes(fill = OBS_numValue)) +
+  scale_fill_viridis_c() +
+  scale_x_discrete(position = "top", expand = c(0,0)) +
+  theme_bw(base_size = 10) +
+  theme(legend.position="bottom") +
+  theme(axis.text.x = element_text(angle=30, hjust=0,vjust=0))  +
+  labs(x="") 
+
+```
+
+```{r, fig.width=10}
+FUSASP_mod <- lmer(OBS_numValue ~ commercialName+ (1|year_loc), data=FUSASP)
+FUSASP_res <- cld(emmeans(FUSASP_mod, ~commercialName), Letters=letters) %>% 
+      mutate(rank = dense_rank(str_squish(.group)))
+FUSASP_res
+
+FUSASP %>%
+  ggplot() + 
+  aes(OBS_numValue, 
+      fct_reorder(commercialName,OBS_numValue,mean)) + 
+  geom_boxplot(outlier.shape = NA, width=.3)+
+  geom_point(
+    data=FUSASP_res, 
+    aes(x=emmean, y=fct_reorder(commercialName, emmean, mean),
+        col=str_squish(.group)), size=3) +  
+  geom_text(data=FUSASP_res, 
+    aes(x=emmean, y=fct_reorder(commercialName, emmean, mean),
+        label=round(emmean)), fontface="bold", vjust=-.7) + 
+  theme(legend.title=element_blank()) + 
+  theme(legend.position="top") + 
+  labs(y="", x="Incidencia")
+```
+
+### Efecto de la cantidad de riegos sobre muerte subita
+
+```{r}
+FUSASP %>% 
+  ggplot() + 
+  facet_wrap("commercialName") + 
+  aes(x=no_riegos, y=OBS_numValue) + 
+  geom_jitter(width=.01, alpha=.2) + 
+  geom_smooth() + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) + 
+  labs(x="Nro de riegos", y="Incidencia de plantas con muerte subita", 
+       title="M1/white high tier - Efecto del riego sobre FUSASP")
+
+
+mod <- lm(OBS_numValue ~ factor(no_riegos)*commercialName,data=FUSASP)
+anova(mod)
+# mod1 <- lm(OBS_numValue ~ factor(no_riegos)+commercialName,data=FUSASP)
+# anova(mod1)
+```
+
+
+```{r}
+cld(emmeans(mod, ~factor(no_riegos)), Letters=letters) %>% knitr::kable(row.names = F)
+```
+
+> hay efecto simple de ambos factores: genotipo y nro de riegos (a mas riegos menos FUSASP)
+
+### LDSR_SETOTU
+
+```{r}
+wht %>%  
+  filter(trait == "LDSR_SETOTU") %>% 
+  # filter(commercialName %in% c("CALAMAR", "HIPOPOTAMO", "DK4050", "MX8639", "P3270W")) %>%
+  ggplot() + 
+  facet_wrap("commercialName") + 
+  aes(x=FIELD_plantingSeason, y=OBS_numValue) +
+  # aes(x=FIELD_plantingSeason, y=OBS_numValue) + 
+  geom_jitter(width=.2, alpha=.2) + 
+  stat_summary(fun.y=median, colour="red", geom="line", aes(group = 1)) + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) + 
+  scale_y_continuous(breaks=scales::pretty_breaks(6)) +
+  # stat_summary(fun = "median", colour = "white", size = 3) + 
+  # stat_summary(fun = "median", colour = "red", size = 5,
+  #              geom = "text", 
+  #              aes(label = paste("~", after_stat(y)))) + 
+  labs(title = "LDSR_SETOTU - M1 / white high tier")
+```
+
+```{r}
+wht %>% 
+  filter(trait == "LDSR_SETOTU") %>% 
+  group_by(FIELD_name) %>% 
+  summarise(LDSR_SETOTU=quantile(OBS_numValue, 0.9)) %>% 
+  filter(LDSR_SETOTU > 2) %>% 
+  pull(FIELD_name) -> SETOTU_keep
+
+wht %>% 
+  filter(trait == "LDSR_SETOTU") %>% 
+  filter(FIELD_name %in% SETOTU_keep) %>% 
+  select(year_loc, commercialName, OBS_numValue) %>% 
+  pivot_wider(names_from = commercialName,
+              values_from = OBS_numValue, 
+              values_fn = mean) %>%
+  # drop_na(-year_loc) %>%
+  pivot_longer(-year_loc, names_to = "commercialName", values_to ="OBS_numValue") -> SETOTU_full
+
+SETOTU_full %>% 
+  ggplot(aes(x = commercialName, y = year_loc)) + 
+  geom_tile(colour="black", aes(fill = OBS_numValue)) +
+  scale_fill_viridis_c() +
+  scale_x_discrete(position = "top", expand = c(0,0)) +
+  theme_bw(base_size = 10) +
+  theme(legend.position="bottom") +
+  theme(axis.text.x = element_text(angle=30, hjust=0,vjust=0))  +
+  labs(x="") 
+```
+
+```{r, eval=FALSE}
+wht %>% 
+  filter(!trait == "YLD") %>% 
+  group_by(commercialName, trait)%>%
+  summarise(score= mean(OBS_numValue, na.rm = TRUE)) %>%
+  pivot_wider(names_from=trait, values_from = score) %>% 
+  column_to_rownames("commercialName") %>% 
+  mutate_if(is.numeric, ~ReScale(., 1, 5), na.rm = TRUE) %>% 
+  pheatmap(
+    cutree_rows = 3, cluster_col = FALSE, 
+    # display_numbers = TRUE,  number_format = "%.1f", 
+    cellwidth = 20, cellheight = 12, 
+    angle_col = "45" ,
+    col = rev(brewer.pal(6, 'RdYlGn')),
+    legend_breaks = c(0, 1, 3, 5), # legend customisation
+    legend_labels = c("Ausente", "Baja sev", "Media", "Alta sev"), 
+    main = "ME1 / White high-tier" 
+  ) 
+```
+
+### LDSR_PUCCSO
+
+```{r}
+wht %>%  
+  filter(trait == "LDSR_PUCCSO") %>% 
+  # filter(commercialName %in% c("CALAMAR", "HIPOPOTAMO", "DK4050", "MX8639", "P3270W")) %>%
+  ggplot() + 
+  facet_wrap("commercialName") + 
+  aes(x=FIELD_plantingSeason, y=OBS_numValue) +
+  # aes(x=FIELD_plantingSeason, y=OBS_numValue) + 
+  geom_jitter(width=.2, alpha=.2) + 
+  stat_summary(fun.y=median, colour="red", geom="line", aes(group = 1)) + 
+  scale_x_continuous(breaks=scales::pretty_breaks(3)) + 
+  scale_y_continuous(breaks=scales::pretty_breaks(6)) +
+  # stat_summary(fun = "median", colour = "white", size = 3) + 
+  # stat_summary(fun = "median", colour = "red", size = 5,
+  #              geom = "text", 
+  #              aes(label = paste("~", after_stat(y)))) + 
+  labs(title = "LDSR_PUCCSO - M1 / white high tier")
+```
+
+```{r, eval=FALSE}
+wht %>% 
+  filter(trait == "LDSR_PUCCSO") %>% 
+  ggplot(aes(x = FIELD_name, y = commercialName)) + 
+  geom_tile(colour="black", aes(fill = OBS_numValue)) +
+  scale_fill_viridis_c() +
+  scale_x_discrete(position = "top", expand = c(0,0)) +
+  theme_bw(base_size = 10) +
+  theme(legend.position="bottom") +
+  theme(axis.text.x = element_text(angle=30, hjust=0,vjust=0))  +
+  labs(x="")
+```
+
+
+```{r, fig.width=12}
+wht %>% 
+  filter(trait == "LDSR_PUCCSO") %>% 
+  group_by(year_loc) %>% 
+  summarise(SDP_FUSASP=quantile(OBS_numValue, 0.95)) %>% 
+  filter(SDP_FUSASP > 2) %>% 
+  pull(year_loc) -> PUCCSO_keep
+
+wht %>% 
+  filter(year_loc %in% PUCCSO_keep) %>% 
+  filter(trait == "LDSR_PUCCSO") %>% 
+  select(year_loc, commercialName, OBS_numValue) %>% 
+  pivot_wider(names_from = commercialName,
+              values_from = OBS_numValue, 
+              values_fn = mean) %>%
+  drop_na(-year_loc) %>%
+  pivot_longer(-year_loc, names_to = "commercialName", values_to ="OBS_numValue") -> PUCCSO
+
+PUCCSO %>% 
+  ggplot(aes(y = year_loc , x = commercialName )) + 
+  geom_tile(colour="black", aes(fill = OBS_numValue)) +
+  scale_fill_viridis_c() +
+  scale_x_discrete(position = "top", expand = c(0,0)) +
+  theme_bw(base_size = 10) +
+  theme(legend.position="bottom") +
+  theme(axis.text.x = element_text(angle=30, hjust=0,vjust=0))  +
+  labs(x="")
+```
+
+
+```{r}
+PUCCSO_mod <- lmer(OBS_numValue ~ commercialName+ (1|year_loc), data=PUCCSO)
+# performance::check_heteroscedasticity(mod_PUCCSO)
+# performance::check_normality(mod_PUCCSO)
+PUCCSO_res <- cld(emmeans(PUCCSO_mod, ~commercialName), Letters=letters) %>% 
+      mutate(rank = dense_rank(str_squish(.group)))
+PUCCSO_res
+
+PUCCSO %>%
+  ggplot() + 
+  aes(OBS_numValue, 
+      fct_reorder(commercialName,OBS_numValue,mean)) + 
+  geom_count(alpha=.2) + 
+  geom_point(
+    data=PUCCSO_res, 
+    aes(x=emmean, y=fct_reorder(commercialName, emmean, mean),
+        col=str_squish(.group)), size=3) +  
+  geom_text(data=PUCCSO_res, 
+    aes(x=emmean, y=fct_reorder(commercialName, emmean, mean),
+        label=round(emmean,1)), fontface="bold", vjust=-.7) + 
+  theme(legend.title=element_blank()) + 
+  theme(legend.position="top") + 
+  labs(y="", x="Incidencia") + 
+  scale_x_continuous(breaks=scales::pretty_breaks(6))  
+```
+
+## Tabla resumen 
+
+```{r, fig.width=9}
+wht_res <- bind_rows(list(SDP_FUSASP = FUSASP_res, LDSR_PUCCSO = PUCCSO_res, YLD=YLD_res), .id = "trait")
+
+wht_res %>% 
+  ggplot(aes(y= trait, x = commercialName )) + 
+  geom_tile(colour="black", aes(fill = rank)) +
+  geom_text(aes(label=round(emmean)), color="white", size=4, fontface="bold") +
+  geom_text(aes(label=paste0(rank, "°")), color="white", size=3, vjust=2.2, fontface="bold") +
+  scale_fill_viridis_c(begin = 0,  end= .9, guide = guide_legend(reverse = FALSE), 
+                       breaks=c(1,5,10)) +
+  scale_x_discrete(position = "top", expand = c(0,0)) +
+  theme_bw(base_size = 16) +
+  theme(axis.text.x = element_text(angle=30, hjust=0,vjust=0))  +
+  labs(x="") 
+```
+
+```{r BLUPS, eval=FALSE}
+wht_clean <- bind_rows( list(SDP_FUSASP = FUSASP, LDSR_PUCCSO = PUCCSO), .id = "trait")
+mod_serie <- lmer(OBS_numValue ~ - 1 +  trait +  (1|trait:commercialName),
+                  data=wht_clean)
+
+ranef_df <- ranef(mod_serie)[[1]] %>%
+  rownames_to_column(var = "trait:commercialName") %>% 
+  separate("trait:commercialName", 
+           sep=":", into=c("trait", "commercialName")) %>%
+  rename(BLUP = "(Intercept)") 
+
+fixef_df <- broom::tidy(fixef(mod_serie)) %>% 
+  mutate(trait=str_remove_all(names, "trait")) %>%
+  rename(Media = x) %>% 
+  select(-names)
+
+wht_blups <- wht %>% 
+  group_by(trait, commercialName) %>% 
+  summarise(mean_obs= mean(OBS_numValue),
+            n = n()) %>% 
+  left_join(ranef_df) %>% 
+  left_join(fixef_df) %>% 
+  drop_na(BLUP) %>% 
+  mutate(BLUPs = Media + BLUP) %>% 
+  # left_join(data_points, by=c("trait", "commercialName")) %>% 
+  mutate(Período="2021/23") %>% 
+  data.frame()
+# wht_blups %>% export("data/wht_blups.csv") 
+
+wht_blups %>%
+  ggplot() + 
+  facet_wrap("trait", scales="free") + 
+  aes(x=mean_obs, y=BLUPs) + 
+  geom_point()  
+  # geom_abline(intercept = 0, slope = 1)
+```
