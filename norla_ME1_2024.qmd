@@ -13,7 +13,6 @@ theme_set(theme_bw(base_family = 12))
 - LDSR_SETOTU; EROTP_RMX; LDSR_CERCZM;	SMUTN_SUB_SPHTRE;	LDSR_PUCCSO	
 - ldsr: setotu, puccso
 - sdp: fusasp, zzxxff
-- smutp
 
 ```{r}
 riegos <- import("data/riegos_24.xlsx") %>% 
@@ -41,40 +40,54 @@ wht %>%
   labs(title="M1 - white high tier")
 ```
 
-### YLD
+## YLD
+
 
 ```{r, eval=TRUE}
 wht %>% 
-  filter(FIELD_plantingSeason == 2023) %>% 
-  filter(trait == "YLD") -> wht23
+  filter(trait == "YLD") %>% 
+  group_by(year_loc) %>% 
+  mutate(env_ind = mean(OBS_numValue), 
+         env_index = cut(env_ind, breaks=c(-Inf, 130, 160, Inf), labels = c("<130", "130-160", ">160"))) -> YLD_dat
 
-YLD_mod <- lmer(OBS_numValue ~ commercialName+ (1|year_loc), data=wht23)
-YLD_res <- cld(emmeans(YLD_mod, ~commercialName), Letters=letters) %>% 
-      mutate(rank = dense_rank(desc(str_squish(.group))))
+```
+
+```{r}
+YLD_mod_23 <- lmer(OBS_numValue ~ env_index:commercialName + (1|year_loc), data=YLD_dat, subset = FIELD_plantingSeason == 2023)
+# ranef(YLD_mod_23)
+YLD_res_23 <- cld(emmeans(YLD_mod_23, ~commercialName|env_index), Letters=letters, decreasing = TRUE) %>% 
+  group_by(env_index) %>% 
+  mutate(rank = dense_rank(str_squish(.group))) %>% 
+  arrange(env_index) #%>% 
+  # select(env_index, commercialName, emmean,lower.CL, upper.CL, letra_tukey=.group, rank)
+YLD_res_23 %>% 
+  group_split(env_index)
+```
+
+```{r, eval=FALSE}
+YLD_mod_pre23 <- lmer(OBS_numValue ~ env_index:commercialName + (1|year_loc), data=YLD_dat, 
+                      subset = FIELD_plantingSeason < 2023)
+# ranef(YLD_mod_23)
+YLD_res_pre23 <- cld(emmeans(YLD_mod_pre23, ~env_index|commercialName), Letters=letters, decreasing = TRUE) %>% 
+  group_by(env_index) %>% 
+  mutate(rank = dense_rank(str_squish(.group))) %>% 
+  arrange(env_index)
+# ranef(YLD_mod_pre23)
+# YLD_res_pre23
+```
+
+```{r, eval=FALSE}
+YLD_res <- bind_rows(list(YLD.2023 = YLD_res_23, YLD.2018_2023 = YLD_res_pre23), .id = "trait.periodo") %>% 
+  separate_wider_delim("trait.periodo", ".", names=c("trait", "periodo")) %>% 
+  unite("trait", c("trait", "env_index")) %>% 
+  select(periodo, trait, commercialName, mean=emmean,lower.CL, upper.CL, letra_tukey=.group, rank) %>% 
+  ungroup()
+
 YLD_res
 ```
 
-
 ```{r, eval=FALSE}
-# EFecto riego
-wht23 %>% 
-  ggplot(aes(y = OBS_numValue, x=no_riegos)) + 
-  facet_wrap("commercialName") + 
-  geom_point(alpha=.05) + 
-  # geom_boxplot(aes(group=no_riegos)) + 
-  geom_smooth(method="lm") + 
-  # stat_summary(col="red", size= 1) + 
-  stat_summary(aes(label=round(..y..)), 
-               fun.y=mean, geom="text", size=3, vjust = -0.5) 
-  # scale_x_continuous(breaks=scales::pretty_breaks(3))
-
-mod <- lm(OBS_numValue ~ factor(no_riegos)*commercialName, data=wht23)
-anova(mod)
-```
-
-
-```{r, eval=FALSE}
-wht %>% 
+YLD_dat %>% 
   # filter(commercialName %in% c("HIPOPOTAMO", "DK4050","DK5021", "P3270W", "P3274W")) %>%
   filter(trait == "YLD") %>%
   ggplot(aes(y = OBS_numValue, x = FIELD_plantingSeason)) + 
@@ -114,12 +127,9 @@ wht %>%
   theme(legend.position="bottom") +
   theme(axis.text.x = element_text(angle=30, hjust=0,vjust=0))  +
   labs(x="") 
-
-
-
 ```
 
-### Evolución de enfermedades
+## Evolución de enfermedades
 
 ```{r}
 wht %>%  
@@ -140,9 +150,11 @@ wht %>%
   labs(title="M1/white high tier")
 ```
 
-### SDP_FUSASP
+## SDP_FUSASP
 
 Datos crudos: Cuanto mas oscuro >> MEJOR (menos enfermedad)
+Se funsionan 'SDP_ZZXXFF' a 'SDP_FUSASP'
+
 
 ```{r, fig.width=10}
 wht %>% 
@@ -227,7 +239,7 @@ cld(emmeans(mod, ~factor(no_riegos)), Letters=letters) %>% knitr::kable(row.name
 
 > hay efecto simple de ambos factores: genotipo y nro de riegos (a mas riegos menos FUSASP)
 
-### LDSR_SETOTU
+## LDSR_SETOTU
 
 ```{r}
 wht %>%  
@@ -247,6 +259,7 @@ wht %>%
   #              aes(label = paste("~", after_stat(y)))) + 
   labs(title = "LDSR_SETOTU - M1 / white high tier")
 ```
+> pocos datos 
 
 ```{r}
 wht %>% 
@@ -277,27 +290,7 @@ SETOTU_full %>%
   labs(x="") 
 ```
 
-```{r, eval=FALSE}
-wht %>% 
-  filter(!trait == "YLD") %>% 
-  group_by(commercialName, trait)%>%
-  summarise(score= mean(OBS_numValue, na.rm = TRUE)) %>%
-  pivot_wider(names_from=trait, values_from = score) %>% 
-  column_to_rownames("commercialName") %>% 
-  mutate_if(is.numeric, ~ReScale(., 1, 5), na.rm = TRUE) %>% 
-  pheatmap(
-    cutree_rows = 3, cluster_col = FALSE, 
-    # display_numbers = TRUE,  number_format = "%.1f", 
-    cellwidth = 20, cellheight = 12, 
-    angle_col = "45" ,
-    col = rev(brewer.pal(6, 'RdYlGn')),
-    legend_breaks = c(0, 1, 3, 5), # legend customisation
-    legend_labels = c("Ausente", "Baja sev", "Media", "Alta sev"), 
-    main = "ME1 / White high-tier" 
-  ) 
-```
-
-### LDSR_PUCCSO
+## LDSR_PUCCSO
 
 ```{r}
 wht %>%  
@@ -390,21 +383,45 @@ PUCCSO %>%
 
 ## Tabla resumen 
 
-```{r, fig.width=9}
-wht_res <- bind_rows(list(SDP_FUSASP = FUSASP_res, LDSR_PUCCSO = PUCCSO_res, YLD=YLD_res), .id = "trait")
+Cada celda contiene su valor estimado en el ajuste de modelo y debajo el ranking segun test de Tukey. 
 
-wht_res %>% 
-  ggplot(aes(y= trait, x = commercialName )) + 
+
+```{r, fig.width=9}
+# YLD_res_23$env_index %>% unique
+WHT_res <- bind_rows(list(
+  "YLD <130" = YLD_res_23 %>% filter(env_index == "<130"),                        
+  "YLD 130-160" = YLD_res_23 %>% filter(env_index == "130-160"),                        
+  "YLD >160" = YLD_res_23 %>% filter(env_index == ">160"),                        
+  SDP_FUSASP = FUSASP_res, 
+  LDSR_PUCCSO = PUCCSO_res), 
+  .id = "trait") %>% 
+  select(trait, commercialName, media=emmean,lower.CL, upper.CL, letra_tukey=.group, rank)  %>% 
+  mutate(trait = fct_rev(factor(trait)))
+
+
+WHT_res %>% 
+  ggplot(aes(y= fct_rev(trait), x = commercialName )) + 
   geom_tile(colour="black", aes(fill = rank)) +
-  geom_text(aes(label=round(emmean)), color="white", size=4, fontface="bold") +
+  geom_text(aes(label=round(media,1)), color="white", size=4, fontface="bold") +
   geom_text(aes(label=paste0(rank, "°")), color="white", size=3, vjust=2.2, fontface="bold") +
   scale_fill_viridis_c(begin = 0,  end= .9, guide = guide_legend(reverse = FALSE), 
                        breaks=c(1,5,10)) +
   scale_x_discrete(position = "top", expand = c(0,0)) +
   theme_bw(base_size = 16) +
   theme(axis.text.x = element_text(angle=30, hjust=0,vjust=0))  +
-  labs(x="") 
+  labs(x="", fill="rank/trait", y="") 
 ```
+
+```{r, eval=FALSE}
+WHT_res %>% mutate(periodo="2023")%>% 
+  bind_rows(
+    YLD_res_pre23 %>% 
+      mutate(trait = "YLD", periodo="2017-23") %>% 
+      select("media" = emmean, periodo, env_index, trait, commercialName, lower.CL, upper.CL, letra_tukey=.group, rank)
+    ) %>% 
+  export("data/M1_WHT_res.csv")
+```
+
 
 ```{r BLUPS, eval=FALSE}
 wht_clean <- bind_rows( list(SDP_FUSASP = FUSASP, LDSR_PUCCSO = PUCCSO), .id = "trait")

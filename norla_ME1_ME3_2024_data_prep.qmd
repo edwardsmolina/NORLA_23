@@ -14,9 +14,9 @@ pacman::p_load(tidyverse, rio, knitr, ggrepel, pheatmap, RColorBrewer)
 theme_set(theme_bw(base_family = 14))
 ```
 
-## ME1 / White high-tier: 
+## ME1 / White high-tier 
 
-![Query](https://console.cloud.google.com/bigquery?ws=!1m7!1m6!12m5!1m3!1sbcs-market-dev-lake!2ssouthamerica-east1!3s11f096e8-90f2-4e4f-a69e-2204afc58228!2e1) 
+![Query ME1](https://console.cloud.google.com/bigquery?ws=!1m7!1m6!12m5!1m3!1sbcs-market-dev-lake!2ssouthamerica-east1!3s11f096e8-90f2-4e4f-a69e-2204afc58228!2e1) 
 
 - LDSR_SETOTU; EROTP_RMX; LDSR_CERCZM;	SMUTN_SUB_SPHTRE;	LDSR_PUCCSO	
 
@@ -106,7 +106,9 @@ wht_dat %>%
 
 ```
 
-## ME3 / Yellow Biotech: 
+## ME3 / Yellow Biotech 
+
+![QUERY ME3_yellow_biotech](https://console.cloud.google.com/bigquery?ws=!1m7!1m6!12m5!1m3!1sbcs-market-dev-lake!2ssouthamerica-east1!3sa79f2144-5d15-4e63-b2c2-71ab8bd0147c!2e1) 
 
 ```{r, import-databases, eval=FALSE}
 yellow_bio_curr <- import("data/ME3_yellow_bio_24.csv") %>% 
@@ -191,7 +193,9 @@ me3_ye_bio %>%
 ```
 
 
-## ME3/Yellow High tier (convencional): 
+## ME3/Yellow High tier (convencional) 
+
+![QUERY ME3](https://console.cloud.google.com/bigquery?ws=!1m7!1m6!12m5!1m3!1sbcs-market-dev-lake!2ssouthamerica-east1!3sa8563718-83f9-4398-8af3-5252298149b3!2e1) 
 
 ```{r, import-databases, eval=FALSE}
 yellow_conv_curr <- import("data/ME3_yellow_conv_24.csv") %>%
